@@ -43,6 +43,8 @@ llm-benchmark/
 ```bash
 export T_LLM_URL="http://localhost:11434/v1"
 export T_MODEL_NAME="deepseek-r1:8b"
+export T_MODEL_NAME="qwen2.5:7b-instruct-q4_K_M"
+export T_MODEL_NAME="lucasmg/deepseek-r1-8b-0528-qwen3-q4_K_M-tool-true:latest"
 export T_API_KEY="ollama"
 python run_benchmarks.py \
     --llm_url ${T_LLM_URL} \
