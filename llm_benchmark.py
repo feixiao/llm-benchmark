@@ -6,6 +6,8 @@ import logging
 import argparse
 import json
 import random
+import tiktoken
+import re
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -108,16 +110,66 @@ LONG_PROMPT_PAIRS = [
     },
 ]
 
-async def process_stream(stream):
+def _count_tokens_from_text(text: str, model: str) -> int:
+    if not text:
+        return 0
+    try:
+        # 优先匹配具体模型
+        try:
+            enc = tiktoken.encoding_for_model(model)
+        except Exception:
+            # 退回到通用的 O200k_base (GPT-4o) 或 cl100k_base
+            enc = tiktoken.get_encoding("o200k_base")
+        return len(enc.encode(text))
+    except Exception:
+        # 如果 o200k 不存在，使用最通用的 cl100k_base
+        enc = tiktoken.get_encoding("cl100k_base")
+        return len(enc.encode(text))
+
+def _normalize_delta_text(value):
+    # 兼容 list/str/None，多模态或结构化内容时尽量串起来
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        return "".join(str(v) for v in value)
+    return str(value)
+
+async def process_stream(stream, model):
     first_token_time = None
-    total_tokens = 0
+    aggregated_text = []
+    usage_tokens = None
+
     async for chunk in stream:
+        # 记录首个流块到达时间，近似 TTFT
         if first_token_time is None:
             first_token_time = time.time()
-        if chunk.choices[0].delta.content or getattr(chunk.choices[0].delta, "reasoning_content", None):
-            total_tokens += 1
-        if chunk.choices[0].finish_reason is not None:
-            break
+
+        delta = chunk.choices[0].delta if chunk.choices else None
+
+        # 累积可见文本内容
+        if delta is not None:
+            content_text = _normalize_delta_text(getattr(delta, "content", None))
+            if content_text:
+                aggregated_text.append(content_text)
+
+            reasoning_text = _normalize_delta_text(getattr(delta, "reasoning_content", None))
+            if reasoning_text:
+                aggregated_text.append(reasoning_text)
+
+            # 适配 Ollama 等模型使用的 focus 字段或 reasoning 字段
+            extra_reasoning = _normalize_delta_text(getattr(delta, "reasoning", None))
+            if extra_reasoning:
+                aggregated_text.append(extra_reasoning)
+
+        # 记录流式 usage（OpenAI 支持 stream_options.include_usage）
+        usage = getattr(chunk, "usage", None)
+        if usage and getattr(usage, "completion_tokens", None) is not None:
+            usage_tokens = usage.completion_tokens
+            # 注意：不要在这里 break，usage 包通常在 finish_reason 包之后或同时出现
+
+    total_tokens = usage_tokens if usage_tokens is not None else _count_tokens_from_text("".join(aggregated_text), model)
     return first_token_time, total_tokens
 
 async def make_request(client, model, output_tokens, request_timeout, use_long_context):
@@ -135,9 +187,46 @@ async def make_request(client, model, output_tokens, request_timeout, use_long_c
                 {"role": "user", "content": content}
             ],
             max_tokens=output_tokens,
-            stream=True
+                stream=True,
+                stream_options={"include_usage": True}
         )
-        first_token_time, total_tokens = await asyncio.wait_for(process_stream(stream), timeout=request_timeout)
+        first_token_time, total_tokens = await asyncio.wait_for(process_stream(stream, model), timeout=request_timeout)
+
+        # 如果流式未捕获到文本，做一次非流式回退以获取文本用于计数
+        if total_tokens == 0:
+            try:
+                resp = await client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "user", "content": content}
+                    ],
+                    max_tokens=output_tokens,
+                    stream=False
+                )
+                msg = resp.choices[0].message
+                usage = getattr(resp, "usage", None)
+                if usage and getattr(usage, "completion_tokens", None) is not None:
+                    total_tokens = usage.completion_tokens
+                else:
+                    full_text = (getattr(msg, "content", "") or "") + (getattr(msg, "reasoning", "") or "") + (getattr(msg, "reasoning_content", "") or "")
+                    logging.info(f"Non-stream chat text length: {len(full_text)}")
+                    total_tokens = _count_tokens_from_text(full_text, model)
+            except Exception:
+                pass
+            # 进一步回退到文本补全接口
+            if total_tokens == 0:
+                try:
+                    resp2 = await client.completions.create(
+                        model=model,
+                        prompt=content,
+                        max_tokens=output_tokens,
+                        stream=False
+                    )
+                    full_text2 = resp2.choices[0].text or ""
+                    logging.info(f"Non-stream completions text length: {len(full_text2)}")
+                    total_tokens = _count_tokens_from_text(full_text2, model)
+                except Exception:
+                    pass
         
         end_time = time.time()
         elapsed_time = end_time - start_time

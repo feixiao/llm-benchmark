@@ -13,7 +13,7 @@ from rich.style import Style
 async def run_all_benchmarks(llm_url, api_key, model, use_long_context):
     configurations = [
         {"num_requests": 10, "concurrency": 1, "output_tokens": 100},
-        {"num_requests": 10, "concurrency": 5, "output_tokens": 100},
+        # {"num_requests": 10, "concurrency": 5, "output_tokens": 100},
     ]
 
     all_results = []
@@ -59,6 +59,8 @@ def analyze_results(all_results):
             
             total_tokens += result.get('total_output_tokens', 0)
             total_time += result.get('total_time', 0)
+
+            
         except Exception as e:
             print(f"警告: 处理并发数 {result.get('concurrency', 'unknown')} 的结果时出错: {str(e)}")
             continue
@@ -92,7 +94,7 @@ def print_summary(all_results, model_name, use_long_context):
     basic_info.add_row("长文本模式", "是" if use_long_context else "否")
     basic_info.add_row("总生成Token数", f"{total_tokens:,}")
     basic_info.add_row("总测试时间", f"{total_time:.2f} 秒")
-    basic_info.add_row("平均Token生成速率", f"{total_tokens/total_time:.2f} tokens/sec")
+    basic_info.add_row("平均Token生成速率", f"{(total_tokens/total_time) if total_time>0 else 0:.2f} tokens/sec")
     
     console.print("\n基本信息:")
     console.print(basic_info)
