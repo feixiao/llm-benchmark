@@ -2,7 +2,7 @@
 
 export T_LLM_URL="http://localhost:11434/v1"
 #export T_MODEL_NAME="deepseek-r1:14b"
-export T_MODEL_NAME="deepseek-r1:8b"
+export T_MODEL_NAME="deepseek-r1:14b"
 export T_API_KEY="ollama"
 python run_benchmarks.py \
     --llm_url ${T_LLM_URL} \
