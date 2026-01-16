@@ -13,10 +13,7 @@ from rich.style import Style
 async def run_all_benchmarks(llm_url, api_key, model, use_long_context):
     configurations = [
         {"num_requests": 10, "concurrency": 1, "output_tokens": 100},
-        {"num_requests": 100, "concurrency": 50, "output_tokens": 100},
-        {"num_requests": 200, "concurrency": 100, "output_tokens": 100},
-        {"num_requests": 400, "concurrency": 200, "output_tokens": 100},
-        {"num_requests": 600, "concurrency": 300, "output_tokens": 100},
+        {"num_requests": 10, "concurrency": 5, "output_tokens": 100},
     ]
 
     all_results = []
