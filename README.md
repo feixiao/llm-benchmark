@@ -56,12 +56,15 @@ python run_benchmarks.py \
 运行单次并发测试：
 
 ```bash
+export T_LLM_URL="http://localhost:11434/v1"
+export T_MODEL_NAME="deepseek-r1:14b"
+export T_API_KEY="ollama"
 python llm_benchmark.py \
-    --llm_url "http://your-llm-server" \
-    --api_key "your-api-key" \
-    --model "your-model-name" \
-    --num_requests 100 \
-    --concurrency 10
+    --llm_url ${T_LLM_URL} \
+    --api_key ${T_API_KEY} \
+    --model ${T_MODEL_NAME} \
+    --num_requests 10 \
+    --concurrency 1
 ```
 
 ### 命令行参数
