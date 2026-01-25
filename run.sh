@@ -7,7 +7,7 @@
 
 #lm studio
 export T_LLM_URL="http://localhost:1234/v1"
-export T_MODEL_NAME="deepseek/deepseek-r1-distill-qwen-32b"
+export T_MODEL_NAME="deepseek/deepseek-r1-distill-llama-70b"
 export T_API_KEY="lmstudio"
 python run_benchmarks.py \
     --llm_url ${T_LLM_URL} \
